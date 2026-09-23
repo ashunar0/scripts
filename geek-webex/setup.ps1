@@ -2,6 +2,9 @@
 # 実行方法: PowerShell を「管理者として実行」で開いて、以下を貼り付ける
 #   irm https://raw.githubusercontent.com/Ashunar0/scripts/main/geek-webex/setup.ps1 | iex
 
+# 標準エラーに出た警告をエラーとして扱わないように（PowerShell の既定値。CI では stop になっているので戻す）
+$ErrorActionPreference = 'Continue'
+
 # 外部コマンドの UTF-8 出力が文字化けしないように
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
@@ -13,6 +16,14 @@ function Step($n, $title) {
   Write-Host "==> [$n/$TotalSteps] $title" -ForegroundColor Cyan
 }
 
+function Fail($command) {
+  Write-Host ''
+  Write-Host "失敗しました（終了コード: ${LASTEXITCODE}）" -ForegroundColor Red
+  Write-Host "${Log} をメンターに送ってください。" -ForegroundColor Red
+  Stop-Transcript | Out-Null
+  throw "失敗したコマンド: $command"
+}
+
 # コマンドを表示してから実行し、失敗したらそこで止める。
 # 2>&1 で標準エラーもまとめて流し、ログ（Start-Transcript）に残す
 function Run {
@@ -20,13 +31,7 @@ function Run {
   $rest = @($args | Select-Object -Skip 1)
   Write-Host "`$ $args" -ForegroundColor DarkGray
   & $exe @rest 2>&1 | ForEach-Object { "$_" }
-  if ($LASTEXITCODE -ne 0) {
-    Write-Host ''
-    Write-Host "失敗しました（終了コード: $LASTEXITCODE）" -ForegroundColor Red
-    Write-Host "$Log をメンターに送ってください。" -ForegroundColor Red
-    Stop-Transcript | Out-Null
-    throw "失敗したコマンド: $args"
-  }
+  if ($LASTEXITCODE -ne 0) { Fail "$args" }
 }
 
 # インストール直後のコマンドを、このウィンドウでもすぐ使えるようにする
@@ -40,7 +45,10 @@ function Install-WingetPackage($id) {
   if ($LASTEXITCODE -eq 0) {
     Write-Host "$id はインストール済みのためスキップします"
   } else {
-    Run winget install --id $id -e --accept-source-agreements --accept-package-agreements
+    # 進捗表示が崩れるので、winget だけはパイプを通さずに直接実行する
+    Write-Host "`$ winget install --id $id" -ForegroundColor DarkGray
+    winget install --id $id -e --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) { Fail "winget install --id $id" }
   }
 }
 
@@ -52,7 +60,7 @@ if (-not $isAdmin) {
 }
 
 Start-Transcript -Path $Log | Out-Null
-Write-Host "環境構築を開始します（ログ: $Log）"
+Write-Host "環境構築を開始します（ログ: ${Log}）"
 
 # ------------------------------------------------------------
 Step 1 'winget の確認'
