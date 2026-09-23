@@ -25,5 +25,3 @@ irm https://raw.githubusercontent.com/Ashunar0/scripts/main/geek-webex/setup.ps1
 ### うまくいかなかったら
 
 もう一度同じコマンドを実行してください。入っているものは飛ばして、止まったところから続きます。
-
-それでも止まる場合は、ホームフォルダにある `setup-log.txt` をメンターに送ってください。

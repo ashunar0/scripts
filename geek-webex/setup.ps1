@@ -2,13 +2,9 @@
 # 実行方法: PowerShell を「管理者として実行」で開いて、以下を貼り付ける
 #   irm https://raw.githubusercontent.com/Ashunar0/scripts/main/geek-webex/setup.ps1 | iex
 
-# 標準エラーに出た警告をエラーとして扱わないように（PowerShell の既定値。CI では stop になっているので戻す）
+# PowerShell の既定値。CI では stop になっているので、受講生の環境にそろえる
 $ErrorActionPreference = 'Continue'
 
-# 外部コマンドの UTF-8 出力が文字化けしないように
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-
-$Log = Join-Path $HOME 'setup-log.txt'
 $TotalSteps = 5
 
 function Step($n, $title) {
@@ -18,19 +14,16 @@ function Step($n, $title) {
 
 function Fail($command) {
   Write-Host ''
-  Write-Host "失敗しました（終了コード: ${LASTEXITCODE}）" -ForegroundColor Red
-  Write-Host "${Log} をメンターに送ってください。" -ForegroundColor Red
-  Stop-Transcript | Out-Null
-  throw "失敗したコマンド: $command"
+  Write-Host "失敗しました: $command" -ForegroundColor Red
+  throw "失敗しました: $command"
 }
 
-# コマンドを表示してから実行し、失敗したらそこで止める。
-# 2>&1 で標準エラーもまとめて流し、ログ（Start-Transcript）に残す
+# コマンドを表示してから実行し、失敗したらそこで止める
 function Run {
   $exe = $args[0]
   $rest = @($args | Select-Object -Skip 1)
   Write-Host "`$ $args" -ForegroundColor DarkGray
-  & $exe @rest 2>&1 | ForEach-Object { "$_" }
+  & $exe @rest
   if ($LASTEXITCODE -ne 0) { Fail "$args" }
 }
 
@@ -45,10 +38,7 @@ function Install-WingetPackage($id) {
   if ($LASTEXITCODE -eq 0) {
     Write-Host "$id はインストール済みのためスキップします"
   } else {
-    # 進捗表示が崩れるので、winget だけはパイプを通さずに直接実行する
-    Write-Host "`$ winget install --id $id" -ForegroundColor DarkGray
-    winget install --id $id -e --accept-source-agreements --accept-package-agreements
-    if ($LASTEXITCODE -ne 0) { Fail "winget install --id $id" }
+    Run winget install --id $id -e --accept-source-agreements --accept-package-agreements
   }
 }
 
@@ -56,7 +46,7 @@ function Install-WingetPackage($id) {
 function Install-Extension($id) {
   for ($i = 1; $i -le 3; $i++) {
     Write-Host "`$ code --install-extension $id" -ForegroundColor DarkGray
-    code --install-extension $id 2>&1 | ForEach-Object { "$_" }
+    code --install-extension $id
     if ($LASTEXITCODE -eq 0) { return }
     if ($i -lt 3) {
       Write-Host "失敗したので 10 秒後にやり直します（${i}/3）" -ForegroundColor Yellow
@@ -73,15 +63,13 @@ if (-not $isAdmin) {
   return
 }
 
-Start-Transcript -Path $Log | Out-Null
-Write-Host "環境構築を開始します（ログ: ${Log}）"
+Write-Host '環境構築を開始します'
 
 # ------------------------------------------------------------
 Step 1 'winget の確認'
 # ------------------------------------------------------------
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
   Write-Host 'winget が見つかりません。Microsoft Store で「アプリ インストーラー」を更新してから、もう一度実行してください。' -ForegroundColor Red
-  Stop-Transcript | Out-Null
   return
 }
 Run winget --version
@@ -153,7 +141,6 @@ Run git config --global init.defaultBranch main
 if ($env:SETUP_SKIP_GITHUB) {
   Write-Host 'SETUP_SKIP_GITHUB が指定されているため、GitHub へのログインをスキップします'
 } else {
-  # ログインは対話が必要なので Run を通さずに直接実行する
   gh auth status --hostname github.com *> $null
   if ($LASTEXITCODE -eq 0) {
     Write-Host 'GitHub にはログイン済みです'
@@ -190,5 +177,3 @@ Run gh --version
 
 Write-Host ''
 Write-Host '環境構築が完了しました。' -ForegroundColor Green
-Write-Host "うまくいかなかった場合は、$Log をメンターに送ってください。"
-Stop-Transcript | Out-Null

@@ -4,17 +4,16 @@
 #   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Ashunar0/scripts/main/geek-webex/setup.sh)"
 set -euo pipefail
 
-LOG="$HOME/setup-log.txt"
 TOTAL_STEPS=5
 
 step() {
-  printf '\n==> [%s/%s] %s\n' "$1" "$TOTAL_STEPS" "$2" | tee -a "$LOG"
+  printf '\n==> [%s/%s] %s\n' "$1" "$TOTAL_STEPS" "$2"
 }
 
-# 出力をそのまま画面に流しつつ、ログにも残す
+# コマンドを表示してから実行する（失敗したら set -e でそこで止まる）
 run() {
-  echo "\$ $*" | tee -a "$LOG"
-  "$@" 2>&1 | tee -a "$LOG"
+  echo "\$ $*"
+  "$@"
 }
 
 # 拡張のサーバーが一時的にエラーを返すことがあるので、3 回までやり直す
@@ -24,20 +23,20 @@ install_extension() {
       return 0
     fi
     if [ "$i" -lt 3 ]; then
-      echo "失敗したので 10 秒後にやり直します（${i}/3）" | tee -a "$LOG"
+      echo "失敗したので 10 秒後にやり直します（${i}/3）"
       sleep 10
     fi
   done
   return 1
 }
 
-echo "環境構築を開始します（ログ: ${LOG}）" | tee "$LOG"
+echo "環境構築を開始します"
 
 # ------------------------------------------------------------
 step 1 "Homebrew"
 # ------------------------------------------------------------
 if command -v brew >/dev/null 2>&1; then
-  echo "インストール済みのためスキップします" | tee -a "$LOG"
+  echo "インストール済みのためスキップします"
 else
   echo "Mac のログインパスワードを入力してください（入力中の文字は表示されません）"
   sudo -v
@@ -98,7 +97,7 @@ EOF
 
 mkdir -p "$SETTINGS_DIR"
 if [ -f "$SETTINGS" ] && cmp -s "$NEW_SETTINGS" "$SETTINGS"; then
-  echo "設定は反映済みのためスキップします" | tee -a "$LOG"
+  echo "設定は反映済みのためスキップします"
 else
   # 既存の設定は消さずに退避しておく
   if [ -f "$SETTINGS" ]; then
@@ -118,11 +117,10 @@ run git config --global init.defaultBranch main
 
 # CI ではブラウザでのログインができないので飛ばす
 if [ -n "${SETUP_SKIP_GITHUB:-}" ]; then
-  echo "SETUP_SKIP_GITHUB が指定されているため、GitHub へのログインをスキップします" | tee -a "$LOG"
+  echo "SETUP_SKIP_GITHUB が指定されているため、GitHub へのログインをスキップします"
 else
-  # ログインは対話が必要なので run（tee）を通さずに直接実行する
-  if gh auth status --hostname github.com >/dev/null 2>&1; then
-    echo "GitHub にはログイン済みです" | tee -a "$LOG"
+    if gh auth status --hostname github.com >/dev/null 2>&1; then
+    echo "GitHub にはログイン済みです"
   else
     echo "ブラウザで GitHub にログインします。"
     echo "画面に出る 8 桁のコードを控えて、Enter を押してください。"
@@ -153,5 +151,4 @@ run npm --version
 run code --version
 run gh --version
 
-printf '\n環境構築が完了しました。\n' | tee -a "$LOG"
-echo "うまくいかなかった場合は、$LOG をメンターに送ってください。" | tee -a "$LOG"
+printf '\n環境構築が完了しました。\n'
