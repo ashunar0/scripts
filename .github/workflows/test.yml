@@ -1,0 +1,26 @@
+name: test
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  geek-webex-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # 受講生と同じく Windows PowerShell 5.1 で、中身をそのまま iex する
+      - name: setup.ps1
+        shell: powershell
+        env:
+          SETUP_SKIP_GITHUB: '1'
+        run: Get-Content -Raw -Encoding UTF8 geek-webex/setup.ps1 | Invoke-Expression
+
+  geek-webex-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup.sh
+        env:
+          SETUP_SKIP_GITHUB: '1'
+        run: /bin/bash -c "$(cat geek-webex/setup.sh)"
