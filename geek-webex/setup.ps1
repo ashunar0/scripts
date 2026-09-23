@@ -52,6 +52,20 @@ function Install-WingetPackage($id) {
   }
 }
 
+# 拡張のサーバーが一時的にエラーを返すことがあるので、3 回までやり直す
+function Install-Extension($id) {
+  for ($i = 1; $i -le 3; $i++) {
+    Write-Host "`$ code --install-extension $id" -ForegroundColor DarkGray
+    code --install-extension $id 2>&1 | ForEach-Object { "$_" }
+    if ($LASTEXITCODE -eq 0) { return }
+    if ($i -lt 3) {
+      Write-Host "失敗したので 10 秒後にやり直します（${i}/3）" -ForegroundColor Yellow
+      Start-Sleep -Seconds 10
+    }
+  }
+  Fail "code --install-extension $id"
+}
+
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).
   IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -96,8 +110,8 @@ Run code --version
 # ------------------------------------------------------------
 Step 3 'VSCode の拡張機能と設定'
 # ------------------------------------------------------------
-Run code --install-extension esbenp.prettier-vscode
-Run code --install-extension PKief.material-icon-theme
+Install-Extension esbenp.prettier-vscode
+Install-Extension PKief.material-icon-theme
 
 $settingsDir = Join-Path $env:APPDATA 'Code\User'
 $settings = Join-Path $settingsDir 'settings.json'

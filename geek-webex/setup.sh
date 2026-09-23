@@ -17,6 +17,20 @@ run() {
   "$@" 2>&1 | tee -a "$LOG"
 }
 
+# 拡張のサーバーが一時的にエラーを返すことがあるので、3 回までやり直す
+install_extension() {
+  for i in 1 2 3; do
+    if run code --install-extension "$1"; then
+      return 0
+    fi
+    if [ "$i" -lt 3 ]; then
+      echo "失敗したので 10 秒後にやり直します（${i}/3）" | tee -a "$LOG"
+      sleep 10
+    fi
+  done
+  return 1
+}
+
 echo "環境構築を開始します（ログ: ${LOG}）" | tee "$LOG"
 
 # ------------------------------------------------------------
@@ -63,8 +77,8 @@ run code --version
 # ------------------------------------------------------------
 step 3 "VSCode の拡張機能と設定"
 # ------------------------------------------------------------
-run code --install-extension esbenp.prettier-vscode
-run code --install-extension PKief.material-icon-theme
+install_extension esbenp.prettier-vscode
+install_extension PKief.material-icon-theme
 
 SETTINGS_DIR="$HOME/Library/Application Support/Code/User"
 SETTINGS="$SETTINGS_DIR/settings.json"
