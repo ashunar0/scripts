@@ -24,3 +24,43 @@ jobs:
         env:
           SETUP_SKIP_GITHUB: '1'
         run: /bin/bash -c "$(cat geek-webex/setup.sh)"
+
+  geek-rails-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup.ps1
+        shell: powershell
+        env:
+          SETUP_SKIP_GITHUB: '1'
+        run: Get-Content -Raw -Encoding UTF8 geek-rails/setup.ps1 | Invoke-Expression
+      # 受講生が PowerShell を開き直した状態を再現して、アプリが作れるか確かめる
+      - name: rails new
+        shell: powershell
+        run: |
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                      [Environment]::GetEnvironmentVariable('Path', 'User')
+          ruby --version
+          rails new sample-app
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cd sample-app
+          ruby bin/rails --version
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+  geek-rails-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup.sh
+        env:
+          SETUP_SKIP_GITHUB: '1'
+        run: /bin/bash -c "$(cat geek-rails/setup.sh)"
+      # 受講生がターミナルを開き直した状態を再現して、アプリが作れるか確かめる
+      - name: rails new
+        shell: zsh -l {0}
+        run: |
+          source ~/.zshrc
+          ruby --version
+          rails new sample-app
+          cd sample-app
+          bin/rails --version

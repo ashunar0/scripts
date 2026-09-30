@@ -1,0 +1,195 @@
+#!/bin/bash
+# 環境構築スクリプト（Mac / Rails）
+# 実行方法:
+#   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Ashunar0/scripts/main/geek-rails/setup.sh)"
+set -euo pipefail
+
+# カリキュラムのバージョンが変わったら、ここだけ書き換える
+RUBY_VERSION=3.4.10
+RAILS_VERSION=8.1.3.1
+
+TOTAL_STEPS=7
+
+step() {
+  printf '\n==> [%s/%s] %s\n' "$1" "$TOTAL_STEPS" "$2"
+}
+
+# コマンドを表示してから実行する（失敗したら set -e でそこで止まる）
+run() {
+  echo "\$ $*"
+  "$@"
+}
+
+# 拡張のサーバーが一時的にエラーを返すことがあるので、3 回までやり直す
+install_extension() {
+  for i in 1 2 3; do
+    if run code --install-extension "$1"; then
+      return 0
+    fi
+    if [ "$i" -lt 3 ]; then
+      echo "失敗したので 10 秒後にやり直します（${i}/3）"
+      sleep 10
+    fi
+  done
+  return 1
+}
+
+echo "環境構築を開始します"
+
+# ------------------------------------------------------------
+step 1 "Homebrew"
+# ------------------------------------------------------------
+if command -v brew >/dev/null 2>&1; then
+  echo "インストール済みのためスキップします"
+else
+  echo "Mac のログインパスワードを入力してください（入力中の文字は表示されません）"
+  sudo -v
+  run env NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+# Apple Silicon は /opt/homebrew、Intel は /usr/local
+if [ -x /opt/homebrew/bin/brew ]; then
+  BREW=/opt/homebrew/bin/brew
+else
+  BREW=/usr/local/bin/brew
+fi
+eval "$("$BREW" shellenv)"
+
+# 次回以降のターミナルでも brew が使えるように
+if ! grep -q 'brew shellenv' "$HOME/.zprofile" 2>/dev/null; then
+  echo "eval \"\$($BREW shellenv)\"" >> "$HOME/.zprofile"
+fi
+
+run brew --version
+
+# ------------------------------------------------------------
+step 2 "GitHub CLI / VSCode"
+# ------------------------------------------------------------
+# brew install は入っていれば何もせず終わるので、スキップ判定は不要
+run brew install gh
+
+# --adopt: 手動で入れた VSCode が既にあれば、それを brew の管理下に引き取る
+run brew install --cask --adopt visual-studio-code
+
+run git --version
+run gh --version
+run code --version
+
+# ------------------------------------------------------------
+step 3 "Ruby $RUBY_VERSION"
+# ------------------------------------------------------------
+# rbenv と一緒に、Ruby のビルドに必要なもの（ruby-build, openssl@3, libyaml など）も入る
+run brew install rbenv
+
+# rbenv init の出力は未定義の変数を参照することがあるので、一時的に -u を外す
+set +u
+eval "$(rbenv init - bash)"
+set -u
+
+# 次回以降のターミナルでも rbenv の Ruby が使われるように
+if ! grep -q 'rbenv init' "$HOME/.zshrc" 2>/dev/null; then
+  echo 'eval "$(rbenv init - zsh)"' >> "$HOME/.zshrc"
+fi
+
+if rbenv versions --bare | grep -qx "$RUBY_VERSION"; then
+  echo "Ruby $RUBY_VERSION はインストール済みのためスキップします"
+else
+  echo ""
+  echo "Ruby をインストールします。10 分ほどかかります。"
+  echo "途中で止まっているように見えますが、動いています。ターミナルを閉じずに待ってください。"
+  run rbenv install "$RUBY_VERSION"
+fi
+run rbenv global "$RUBY_VERSION"
+run ruby --version
+
+# ------------------------------------------------------------
+step 4 "Rails $RAILS_VERSION"
+# ------------------------------------------------------------
+if gem list rails --installed --exact --version "$RAILS_VERSION" >/dev/null 2>&1; then
+  echo "Rails $RAILS_VERSION はインストール済みのためスキップします"
+else
+  echo "Rails をインストールします。数分かかります。"
+  run gem install rails --version "$RAILS_VERSION" --no-document
+  run rbenv rehash
+fi
+run rails --version
+
+# ------------------------------------------------------------
+step 5 "VSCode の拡張機能と設定"
+# ------------------------------------------------------------
+# .erb に色を付ける（VSCode は .rb にしか色を付けない）
+install_extension vortizhe.simple-ruby-erb
+install_extension PKief.material-icon-theme
+
+SETTINGS_DIR="$HOME/Library/Application Support/Code/User"
+SETTINGS="$SETTINGS_DIR/settings.json"
+NEW_SETTINGS="$(mktemp)"
+cat > "$NEW_SETTINGS" <<'EOF'
+{
+  "workbench.iconTheme": "material-icon-theme",
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "editor.renderWhitespace": "boundary",
+  "explorer.compactFolders": false
+}
+EOF
+
+mkdir -p "$SETTINGS_DIR"
+if [ -f "$SETTINGS" ] && cmp -s "$NEW_SETTINGS" "$SETTINGS"; then
+  echo "設定は反映済みのためスキップします"
+else
+  # 既存の設定は消さずに退避しておく
+  if [ -f "$SETTINGS" ]; then
+    BACKUP="$SETTINGS.backup-$(date +%Y%m%d-%H%M%S)"
+    run cp "$SETTINGS" "$BACKUP"
+  fi
+  run cp "$NEW_SETTINGS" "$SETTINGS"
+fi
+rm -f "$NEW_SETTINGS"
+run cat "$SETTINGS"
+
+# ------------------------------------------------------------
+step 6 "GitHub との紐付け"
+# ------------------------------------------------------------
+run git config --global core.editor "code --wait"
+run git config --global init.defaultBranch main
+
+# CI ではブラウザでのログインができないので飛ばす
+if [ -n "${SETUP_SKIP_GITHUB:-}" ]; then
+  echo "SETUP_SKIP_GITHUB が指定されているため、GitHub へのログインをスキップします"
+else
+  if gh auth status --hostname github.com >/dev/null 2>&1; then
+    echo "GitHub にはログイン済みです"
+  else
+    echo "ブラウザで GitHub にログインします。"
+    echo "画面に出る 8 桁のコードを控えて、Enter を押してください。"
+    gh auth login --hostname github.com --git-protocol https --web --scopes user:email
+  fi
+
+  # メールアドレスを読む権限が無いログインだった場合は、権限を追加する
+  if ! gh api user/emails >/dev/null 2>&1; then
+    echo "メールアドレスを読み取る権限を追加します。もう一度ブラウザで承認してください。"
+    gh auth refresh --hostname github.com --scopes user:email
+  fi
+
+  run gh auth setup-git
+
+  GITHUB_USER="$(gh api user --jq .login)"
+  GITHUB_EMAIL="$(gh api user/emails --jq '.[] | select(.primary) | .email')"
+
+  run git config --global user.name "$GITHUB_USER"
+  run git config --global user.email "$GITHUB_EMAIL"
+fi
+
+# ------------------------------------------------------------
+step 7 "確認"
+# ------------------------------------------------------------
+run git --version
+run gh --version
+run code --version
+run ruby --version
+run rails --version
+
+printf '\n環境構築が完了しました。\n'
+printf 'ターミナルを一度閉じて、開き直してから使ってください。\n'
