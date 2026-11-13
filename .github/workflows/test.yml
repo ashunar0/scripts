@@ -77,7 +77,7 @@ jobs:
       - name: uv init
         shell: zsh -l {0}
         run: |
-          uv init sample-project
+          uv init --no-package sample-project
           cd sample-project
           uv run python --version
           uv run main.py
