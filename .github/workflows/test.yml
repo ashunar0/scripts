@@ -64,3 +64,20 @@ jobs:
           rails new sample-app
           cd sample-app
           bin/rails --version
+
+  lab-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup.sh
+        env:
+          SETUP_SKIP_GITHUB: '1'
+        run: /bin/bash -c "$(cat lab/setup.sh)"
+      # ターミナルを開き直した状態を再現して、プロジェクトが作れて動くか確かめる
+      - name: uv init
+        shell: zsh -l {0}
+        run: |
+          uv init sample-project
+          cd sample-project
+          uv run python --version
+          uv run main.py

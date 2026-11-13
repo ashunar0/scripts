@@ -25,3 +25,15 @@ irm https://raw.githubusercontent.com/Ashunar0/scripts/main/geek-webex/setup.ps1
 ### うまくいかなかったら
 
 もう一度同じコマンドを実行してください。入っているものは飛ばして、止まったところから続きます。
+
+## lab
+
+研究室向け（Mac のみ）。Git / uv / Python / GitHub CLI / VSCode を入れて、VSCode の設定（Python・Ruff）と GitHub との紐付けまで行います。
+
+ターミナルで以下を実行してください。
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Ashunar0/scripts/main/lab/setup.sh)"
+```
+
+うまくいかなかったら、もう一度同じコマンドを実行してください。入っているものは飛ばして、止まったところから続きます。
